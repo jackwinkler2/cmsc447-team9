@@ -1,1 +1,5 @@
 - Each 30 mins expected to spend on a task is worth 5 story points
+e.g: .5hr task has val 5
+     1hr task has val 10
+     2hr task has val 20
+     3.5hr task has val 35
