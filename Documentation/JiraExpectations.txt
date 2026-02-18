@@ -1,0 +1,1 @@
+- Each 30 mins expected to spend on a task is worth 5 story points
