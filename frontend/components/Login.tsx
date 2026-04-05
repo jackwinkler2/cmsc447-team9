@@ -1,29 +1,39 @@
 import { useState } from "react";
-import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
+import { View, Text, Image, TouchableOpacity, StyleSheet } from "react-native";
+import { router } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Colors } from "@/constants/Colors";
+import { useAuth, Role } from "@/contexts/AuthContext";
 
 export default function LoginScreen() {
   const [showRoles, setShowRoles] = useState(false);
+  const { login } = useAuth();
+
+  function handleRoleSelect(role: Role) {
+    login(role);
+    router.replace("/(tabs)/inventory");
+  }
 
   return (
     <SafeAreaView style={styles.safe}>
       <View style={styles.container}>
-        <View style={styles.logo}>
-          <Text style={styles.logoText}>MEC2</Text>
-        </View>
+        <Image
+          source={require("@/assets/MEC2 Logo.png")}
+          style={styles.logo}
+          resizeMode="contain"
+        />
 
         <Text style={styles.heading}>Welcome</Text>
 
         {showRoles ? (
           <View style={styles.roleContainer}>
-            <TouchableOpacity style={styles.roleButton}>
+            <TouchableOpacity style={styles.roleButton} onPress={() => handleRoleSelect("fieldcrew")}>
               <Text style={styles.roleText}>Field Crew</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.roleButton}>
+            <TouchableOpacity style={styles.roleButton} onPress={() => handleRoleSelect("driver")}>
               <Text style={styles.roleText}>Driver</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.roleButton}>
+            <TouchableOpacity style={styles.roleButton} onPress={() => handleRoleSelect("admin")}>
               <Text style={styles.roleText}>Admin</Text>
             </TouchableOpacity>
           </View>
@@ -51,27 +61,18 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   logo: {
-    width: 96,
-    height: 96,
-    borderRadius: 24,
-    backgroundColor: Colors.light.tint,
-    alignItems: "center",
-    justifyContent: "center",
+    width: 200,
+    height: 100,
     marginBottom: 24,
-  },
-  logoText: {
-    color: "#fff",
-    fontSize: 32,
-    fontWeight: "700",
   },
   heading: {
     fontSize: 28,
     fontWeight: "700",
-    color: Colors.light.text,
+    color: "rgb(22, 13, 84)",
     marginBottom: 48,
   },
   signInButton: {
-    backgroundColor: Colors.light.tint,
+    backgroundColor: "rgb(22, 13, 84)",
     paddingVertical: 16,
     paddingHorizontal: 48,
     borderRadius: 12,
@@ -88,7 +89,7 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   roleButton: {
-    backgroundColor: Colors.light.tint,
+    backgroundColor: "rgb(22, 13, 84)",
     paddingVertical: 14,
     borderRadius: 12,
     alignItems: "center",
