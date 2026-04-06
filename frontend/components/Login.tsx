@@ -2,7 +2,6 @@ import { useState } from "react";
 import { View, Text, Image, TouchableOpacity, StyleSheet } from "react-native";
 import { router } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Colors } from "@/constants/Colors";
 import { useAuth, Role } from "@/contexts/AuthContext";
 
 export default function LoginScreen() {
@@ -32,6 +31,9 @@ export default function LoginScreen() {
             </TouchableOpacity>
             <TouchableOpacity style={styles.roleButton} onPress={() => handleRoleSelect("driver")}>
               <Text style={styles.roleText}>Driver</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.roleButton} onPress={() => handleRoleSelect("projectmanager")}>
+              <Text style={styles.roleText}>Project Manager</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.roleButton} onPress={() => handleRoleSelect("admin")}>
               <Text style={styles.roleText}>Admin</Text>

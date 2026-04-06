@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, ReactNode } from "react";
 
-export type Role = "fieldcrew" | "driver" | "admin" | null;
+export type Role = "fieldcrew" | "driver" | "projectmanager" | "admin" | null;
 
 type AuthContextType = {
   role: Role;
