@@ -26,11 +26,8 @@ export default function LoginScreen() {
 
         {showRoles ? (
           <View style={styles.roleContainer}>
-            <TouchableOpacity style={styles.roleButton} onPress={() => handleRoleSelect("fieldcrew")}>
-              <Text style={styles.roleText}>Field Crew</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.roleButton} onPress={() => handleRoleSelect("driver")}>
-              <Text style={styles.roleText}>Driver</Text>
+            <TouchableOpacity style={styles.roleButton} onPress={() => handleRoleSelect("logistics")}>
+              <Text style={styles.roleText}>Logistics</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.roleButton} onPress={() => handleRoleSelect("projectmanager")}>
               <Text style={styles.roleText}>Project Manager</Text>

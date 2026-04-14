@@ -5,7 +5,6 @@ import { useAuth } from "@/contexts/AuthContext";
 
 function formatRole(role: string): string {
   if (role === "projectmanager") return "Project Manager";
-  if (role === "fieldcrew") return "Field Crew";
   return role.charAt(0).toUpperCase() + role.slice(1);
 }
 
