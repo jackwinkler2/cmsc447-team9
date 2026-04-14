@@ -1,7 +1,15 @@
-# cmsc447-team9
-SWE William Project
+# CMSC447-team9
+Software Engineering 1:
+*William's Construction Mobile Application*
 
-Run Instructions (frontend)
+**Problem Statement:** 
+William’s company currently lacks a uniform system for receiving, logging, tracking, and requesting construction materials. Construction materials often arrive with little notice and with vague documentation. This leads to misplaced inventory, unnecessary reorders, and lost field productivity. 
+
+**Project Goal:**
+To design and deliver a usable, deployable internal application that improves material accountability and operational visibility within construction operations.
+
+
+**Run Instructions (frontend)**
 
 - download codebase locally
 - open a terminal
@@ -10,4 +18,3 @@ Run Instructions (frontend)
 - switch to frontend folder
 - run npx expo start --tunnel
 - scan with Expo Go app (android) or camera for ios, or press w for web bundle
->>>>>>> fa2d5b92a0a4228aecd1409f684896d8745680ef
