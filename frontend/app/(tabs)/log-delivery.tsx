@@ -43,12 +43,39 @@ export default function LogDeliveryScreen() {
     setPhotoUri(null);
   }
 
-  function handleSubmit() {
-    // TODO: upload photo to Amazon Textract and send extracted data to backend
-    Alert.alert("Delivery Logged", "Packing slip submitted successfully.");
-    setPhotoUri(null);
-  }
+ async function handleSubmit() {
+    if (!photoUri) return;
 
+    // creates form data for request
+    const formData = new FormData();
+    formData.append("file", {
+      uri: photoUri,
+      name: "packing_slip.jpg",
+      type: "image/jpeg",
+    } as any);
+
+    try {
+      // when testing replace localhost with your own computers local IP address
+      const response = await fetch("http://10.0.0.114:5000/api/upload", {
+        method: "POST",
+        body: formData,
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      });
+
+      if (response.ok) {
+        Alert.alert("Delivery Logged", "Packing slip uploaded successfully.");
+        setPhotoUri(null); // Reset the screen after success
+      } else {
+        const errorData = await response.json();
+        Alert.alert("Upload Failed", errorData.error || "An error occurred");
+      }
+    } catch (error) {
+      console.error(error);
+      Alert.alert("Error", "Could not connect to the server.");
+    }
+  }
   // Permission not yet determined
   if (!permission) return <View style={styles.flex} />;
 
