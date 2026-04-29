@@ -12,8 +12,8 @@ api_bp = Blueprint('api', __name__, url_prefix='/api')
 # this should eventually be replaced once we run with AWS compute
 s3_client = boto3.client(
     "s3",
-    aws_access_key_id=os.environ.get("AKIA3FAJORBO6SQJFTAL"),
-    aws_secret_access_key=os.environ.get("Ef8HvL1KKrYQrD040VEn3Szl721yPfALQZRSIYG1"),
+    aws_access_key_id=os.environ.get("junk"),
+    aws_secret_access_key=os.environ.get("junk"),
     region_name=os.environ.get("AWS_REGION", "us-east-1")
 )
 
