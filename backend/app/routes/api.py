@@ -1,53 +1,103 @@
+from flask import Blueprint, request, jsonify
+import boto3
 import os
 import uuid
-import boto3
-from flask import Blueprint, jsonify, request
+import json
+from app import db
+from app.models import Delivery, Material, Location, User, Inventory
 
-api_bp = Blueprint("api", __name__, url_prefix="/api")
+# Define the blueprint
+api_bp = Blueprint('api', __name__, url_prefix='/api')
 
 # this should eventually be replaced once we run with AWS compute
 s3_client = boto3.client(
     "s3",
-    aws_access_key_id=os.environ.get("AKIA3FAJORBO7KDYJWPF"),
-    aws_secret_access_key=os.environ.get("hlpox+w2XFrUgqbZTK7Ky8Xa065j78OsRTJI+KGg"),
+    aws_access_key_id=os.environ.get("AKIA3FAJORBO6SQJFTAL"),
+    aws_secret_access_key=os.environ.get("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"),
     region_name=os.environ.get("AWS_REGION", "us-east-1")
 )
 
-@api_bp.route("/health")
-def health():
-    return jsonify({"status": "ok"})
 
-@api_bp.route("/upload", methods=["POST"])
-def upload_photo():
-    # no file is obviously an error
-    if "file" not in request.files:
-        return jsonify({"error": "No file provided"}), 400
-        
-    file = request.files["file"]
+@api_bp.route('/upload', methods=['POST'])
+def upload_file():
+    # image upload
+    if 'file' not in request.files:
+        return jsonify({"error": "No file part"}), 400
     
-    if file.filename == "":
+    file = request.files['file']
+    if file.filename == '':
         return jsonify({"error": "No selected file"}), 400
 
-    # generates unique name for photo
-    file_extension = file.filename.rsplit(".", 1)[1].lower() if "." in file.filename else "jpg"
-    unique_filename = f"{uuid.uuid4()}.{file_extension}"
     bucket_name = os.environ.get("AWS_S3_BUCKET_NAME")
+    unique_filename = f"{uuid.uuid4()}.jpg"
+    
+    try:
+        # upload to s3
+        s3_client.upload_fileobj(file, bucket_name, unique_filename)
+        # store the image url to add to the database
+        s3_url = f"https://{bucket_name}.s3.amazonaws.com/{unique_filename}"
+    except Exception as e:
+        return jsonify({"error": f"S3 Upload failed: {str(e)}"}), 500
+
+    # extract ocr data
+    ocr_data_str = request.form.get('ocr_data')
+    if not ocr_data_str:
+        return jsonify({"error": "No OCR data provided"}), 400
 
     try:
-        # uploads to s3
-        s3_client.upload_fileobj(
-            file, 
-            bucket_name, 
-            unique_filename,
-            ExtraArgs={"ContentType": file.content_type}
-        )
+        ocr_data = json.loads(ocr_data_str)
         
-        # final textract logic will go here
+        # placeholder user
+        user = User.query.filter_by(role="Field").first()
+        if not user:
+            user = User(name="Test Field Worker", email="field@williams.com", role="Field")
+            db.session.add(user)
+            db.session.commit() # Commit to generate the user.id
+
+        # gets jobsite location
+        jobsite_name = ocr_data.get("jobSite", "Unknown Site")
+        location = Location.query.filter_by(name=jobsite_name).first()
+        if not location:
+            location = Location(name=jobsite_name, type="Jobsite", status="Active")
+            db.session.add(location)
+            db.session.commit() # Commit to generate the location.id
+
+        # create delivery record
+        new_delivery = Delivery(
+            crew_member_id=user.id,
+            jobsite_id=location.id,
+            packing_slip_url=s3_url
+        )
+        db.session.add(new_delivery)
+        db.session.flush()
+
+        # creates materials and updates inventory
+        for item in ocr_data.get("items", []):
+            mat_name = item.get("material")
+            qty = int(item.get("qty", 0))
+
+            # find the material or create a new one
+            material = Material.query.filter_by(name=mat_name).first()
+            if not material:
+                material = Material(name=mat_name)
+                db.session.add(material)
+                db.session.flush()
+
+            # update the inventory for this specific location
+            inventory_record = Inventory.query.filter_by(location_id=location.id, material_id=material.id).first()
+            if inventory_record:
+                inventory_record.quantity += qty
+            else:
+                new_inv = Inventory(location_id=location.id, material_id=material.id, quantity=qty)
+                db.session.add(new_inv)
+
+        db.session.commit()
 
         return jsonify({
-            "message": "Upload successful", 
-            "s3_filename": unique_filename
+            "message": "Successfully uploaded photo and saved data!", 
+            "delivery_id": new_delivery.id
         }), 200
-        
+
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        db.session.rollback() # if anything fails, undo the database changes to prevent corrupted data
+        return jsonify({"error": f"Database insertion failed: {str(e)}"}), 500

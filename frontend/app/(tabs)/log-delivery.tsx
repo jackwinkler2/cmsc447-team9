@@ -78,7 +78,7 @@ export default function LogDeliveryScreen() {
 
     try {
       // change to local device ip when testing
-      const response = await fetch("http://10.0.0.114:5000/api/upload", {
+      const response = await fetch("http://130.85.239.40:5000/api/upload", {
         method: "POST",
         body: uploadData,
         headers: {
