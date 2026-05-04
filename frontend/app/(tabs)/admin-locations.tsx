@@ -3,11 +3,11 @@ import { StyleSheet, Text, View, TextInput, Pressable, Alert, ActivityIndicator 
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 const BRAND = "rgb(22, 13, 84)";
-const API_URL = "http://130.85.241.142:5000/api/locations"; // Make sure to use your current Hotspot/Wi-Fi IP!
+const API_URL = "http://130.85.241.142:5000/api/locations";
 
 export default function AdminLocationsScreen() {
   const [name, setName] = useState('');
-  const [type, setType] = useState('Jobsite'); // Defaults to Jobsite
+  const [type, setType] = useState('Jobsite'); 
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async () => {
@@ -30,7 +30,7 @@ export default function AdminLocationsScreen() {
 
       if (response.ok) {
         Alert.alert("Success", `${type} "${name}" was created successfully!`);
-        setName(''); // Clear the input after success
+        setName(''); 
       } else {
         Alert.alert("Error", data.error || "Failed to create location.");
       }

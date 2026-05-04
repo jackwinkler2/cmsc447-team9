@@ -1,143 +1,103 @@
-import { useState } from "react";
-import {
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { useState } from 'react';
+import { StyleSheet, Text, View, TextInput, Pressable, Alert, ActivityIndicator, ScrollView } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+
+const BRAND = "rgb(22, 13, 84)";
+const API_URL = "http://130.85.241.142:5000/api/requests"; 
 
 export default function RequestScreen() {
-  const [materialType, setMaterialType] = useState("");
-  const [quantity, setQuantity] = useState("");
-  const [notes, setNotes] = useState("");
+  const [materialName, setMaterialName] = useState('');
+  const [quantity, setQuantity] = useState('');
+  const [jobsiteId, setJobsiteId] = useState('1'); // 1 for testing
+  const [loading, setLoading] = useState(false);
 
-  function handleSubmit() {
-    if (!materialType.trim() || !quantity.trim()) {
-      Alert.alert("Missing fields", "Material Type and Quantity are required.");
+  const handleSubmit = async () => {
+    if (!materialName.trim() || !quantity.trim() || !jobsiteId.trim()) {
+      Alert.alert("Missing Fields", "Please fill out all fields.");
       return;
     }
-    // TODO: send to backend
-    Alert.alert("Request Submitted", `${materialType} × ${quantity}`);
-    setMaterialType("");
-    setQuantity("");
-    setNotes("");
-  }
+
+    setLoading(true);
+    try {
+      const response = await fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          material_name: materialName.trim(),
+          quantity: parseInt(quantity),
+          jobsite_id: parseInt(jobsiteId)
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        Alert.alert("Success", "Material request submitted!");
+        setMaterialName('');
+        setQuantity('');
+      } else {
+        Alert.alert("Error", data.error || "Failed to submit request.");
+      }
+    } catch (error) {
+      console.error(error);
+      Alert.alert("Network Error", "Could not connect to the server.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <SafeAreaView style={styles.safe}>
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-      >
-        <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-          <Text style={styles.heading}>Material Request</Text>
+      <ScrollView contentContainerStyle={styles.container}>
+        <View style={styles.header}>
+          <Text style={styles.headerTitle}>Request Materials</Text>
+          <Text style={styles.headerSubtext}>Submit a request to the warehouse</Text>
+        </View>
 
-          <View style={styles.row}>
-            <Text style={styles.label}>Material Type</Text>
-            <TextInput
-              style={styles.input}
-              value={materialType}
-              onChangeText={setMaterialType}
-              placeholder="e.g. Concrete"
-              placeholderTextColor="#aaa"
-            />
-          </View>
+        <View style={styles.card}>
+          <Text style={styles.label}>Material Name</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="e.g., 2x4 Lumber"
+            value={materialName}
+            onChangeText={setMaterialName}
+          />
 
-          <View style={styles.row}>
-            <Text style={styles.label}>Material Quantity</Text>
-            <TextInput
-              style={styles.input}
-              value={quantity}
-              onChangeText={setQuantity}
-              placeholder="e.g. 50"
-              placeholderTextColor="#aaa"
-              keyboardType="numeric"
-            />
-          </View>
+          <Text style={styles.label}>Quantity</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="e.g., 50"
+            keyboardType="numeric"
+            value={quantity}
+            onChangeText={setQuantity}
+          />
 
-          <View style={styles.row}>
-            <Text style={styles.label}>Notes</Text>
-            <TextInput
-              style={[styles.input, styles.notesInput]}
-              value={notes}
-              onChangeText={setNotes}
-              placeholder="Optional notes"
-              placeholderTextColor="#aaa"
-              multiline
-            />
-          </View>
+          <Text style={styles.label}>Jobsite ID (Leave as 1 for testing)</Text>
+          <TextInput
+            style={styles.input}
+            keyboardType="numeric"
+            value={jobsiteId}
+            onChangeText={setJobsiteId}
+          />
 
-          <Pressable style={styles.button} onPress={handleSubmit}>
-            <Text style={styles.buttonText}>Submit</Text>
+          <Pressable style={styles.submitButton} onPress={handleSubmit} disabled={loading}>
+            {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitText}>Submit Request</Text>}
           </Pressable>
-        </ScrollView>
-      </KeyboardAvoidingView>
+        </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
 
-const BRAND = "rgb(22, 13, 84)";
-
 const styles = StyleSheet.create({
-  safe: {
-    flex: 1,
-    backgroundColor: "#f5f5f5",
-  },
-  flex: {
-    flex: 1,
-  },
-  container: {
-    padding: 20,
-  },
-  heading: {
-    fontSize: 28,
-    fontWeight: "700",
-    color: BRAND,
-    marginBottom: 32,
-  },
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 20,
-    gap: 12,
-  },
-  label: {
-    width: 140,
-    fontSize: 15,
-    fontWeight: "600",
-    color: BRAND,
-  },
-  input: {
-    flex: 1,
-    backgroundColor: "#fff",
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 15,
-    color: "#333",
-    borderWidth: 1,
-    borderColor: "#ddd",
-  },
-  notesInput: {
-    height: 88,
-    textAlignVertical: "top",
-  },
-  button: {
-    marginTop: 12,
-    backgroundColor: BRAND,
-    borderRadius: 10,
-    paddingVertical: 14,
-    alignItems: "center",
-  },
-  buttonText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "700",
-  },
+  safe: { flex: 1, backgroundColor: "#f5f5f5" },
+  container: { padding: 16 },
+  header: { marginBottom: 20, paddingHorizontal: 4 },
+  headerTitle: { fontSize: 28, fontWeight: "bold", color: BRAND },
+  headerSubtext: { fontSize: 14, color: "#666", marginTop: 4 },
+  card: { backgroundColor: "#fff", padding: 20, borderRadius: 12, borderWidth: 1, borderColor: "#e8e8e8", elevation: 2, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 2 },
+  label: { fontSize: 15, fontWeight: "600", color: "#333", marginBottom: 8 },
+  input: { borderWidth: 1, borderColor: "#ccc", borderRadius: 8, padding: 14, fontSize: 16, marginBottom: 20, backgroundColor: "#fafafa" },
+  submitButton: { backgroundColor: BRAND, paddingVertical: 16, borderRadius: 8, alignItems: "center", marginTop: 8 },
+  submitText: { color: "#fff", fontSize: 16, fontWeight: "700" },
 });

@@ -4,7 +4,7 @@ import os
 import uuid
 import json
 from app import db
-from app.models import Delivery, Material, Location, User, Inventory
+from app.models import Delivery, Material, Location, User, Inventory, MaterialRequest
 
 # Define the blueprint
 api_bp = Blueprint('api', __name__, url_prefix='/api')
@@ -136,6 +136,88 @@ def create_location():
         db.session.add(new_loc)
         db.session.commit()
         return jsonify({"message": "Location created successfully", "id": new_loc.id}), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+@api_bp.route('/requests', methods=['POST'])
+def create_material_request():
+    """Field route to submit a new material request"""
+    data = request.get_json()
+
+    # validation 
+    if not data or not data.get('material_name') or not data.get('quantity') or not data.get('jobsite_id'):
+        return jsonify({"error": "Missing required fields"}), 400
+
+    try:
+        # mock user auth
+        user = User.query.filter_by(role="Field").first()
+        if not user:
+            return jsonify({"error": "No field user found in database."}), 404
+
+        new_request = MaterialRequest(
+            material_name=data['material_name'],
+            quantity=int(data['quantity']),
+            jobsite_id=data['jobsite_id'],
+            requester_id=user.id,
+            status="Pending"
+        )
+        
+        db.session.add(new_request)
+        db.session.commit()
+        return jsonify({"message": "Request submitted successfully!", "id": new_request.id}), 201
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+
+@api_bp.route('/requests', methods=['GET'])
+def get_material_requests():
+    """Admin route to view all material requests"""
+    try:
+        status_filter = request.args.get('status')
+        if status_filter:
+            requests_data = MaterialRequest.query.filter_by(status=status_filter).all()
+        else:
+            requests_data = MaterialRequest.query.all()
+
+        result = []
+        for req in requests_data:
+            result.append({
+                "id": req.id,
+                "material_name": req.material_name,
+                "quantity": req.quantity,
+                "status": req.status,
+                "jobsite": req.jobsite.name if req.jobsite else "Unknown",
+                "requester": req.requester.name if req.requester else "Unknown"
+            })
+            
+        return jsonify(result), 200
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@api_bp.route('/requests/<int:request_id>', methods=['PATCH'])
+def update_request_status(request_id):
+    """Admin route to Approve or Deny a request"""
+    data = request.get_json()
+    new_status = data.get('status')
+
+    if new_status not in ['Approved', 'Denied']:
+        return jsonify({"error": "Status must be 'Approved' or 'Denied'"}), 400
+
+    try:
+        mat_req = MaterialRequest.query.get(request_id)
+        if not mat_req:
+            return jsonify({"error": "Request not found"}), 404
+
+        mat_req.status = new_status
+        db.session.commit()
+        
+        return jsonify({"message": f"Request {request_id} marked as {new_status}"}), 200
+        
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": str(e)}), 500

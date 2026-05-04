@@ -61,6 +61,20 @@ class Inventory(db.Model):
     material_id = db.Column(db.Integer, db.ForeignKey('materials.id'), nullable=False)
     quantity = db.Column(db.Integer, nullable=False, default=0)
     
-    # Relationships to easily fetch location and material details
     location = db.relationship('Location', backref=db.backref('inventory_items', lazy=True))
     material = db.relationship('Material', backref=db.backref('inventory_locations', lazy=True))
+
+class MaterialRequest(db.Model):
+    __tablename__ = 'material_requests'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    material_name = db.Column(db.String(100), nullable=False) 
+    quantity = db.Column(db.Integer, nullable=False)
+
+    jobsite_id = db.Column(db.Integer, db.ForeignKey('locations.id'), nullable=False)
+    requester_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    
+    status = db.Column(db.String(20), default='Pending') 
+
+    jobsite = db.relationship('Location', backref='requests')
+    requester = db.relationship('User', backref='requests')
