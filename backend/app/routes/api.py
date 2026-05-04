@@ -12,8 +12,6 @@ api_bp = Blueprint('api', __name__, url_prefix='/api')
 # this should eventually be replaced once we run with AWS compute
 s3_client = boto3.client(
     "s3",
-    aws_access_key_id=os.environ.get("junk"),
-    aws_secret_access_key=os.environ.get("junk"),
     region_name=os.environ.get("AWS_REGION", "us-east-1")
 )
 
@@ -101,3 +99,43 @@ def upload_file():
     except Exception as e:
         db.session.rollback() # if anything fails, undo the database changes to prevent corrupted data
         return jsonify({"error": f"Database insertion failed: {str(e)}"}), 500
+    
+
+@api_bp.route('/inventory', methods=['GET'])
+def get_inventory():
+    """Fetches all inventory across all locations"""
+    try:
+        inventory_records = Inventory.query.all()
+        result = []
+        for inv in inventory_records:
+            result.append({
+                "id": inv.id,
+                "location": inv.location.name,
+                "location_type": inv.location.type,
+                "material": inv.material.name,
+                "quantity": inv.quantity
+            })
+        return jsonify(result), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@api_bp.route('/locations', methods=['POST'])
+def create_location():
+    """Admin route to create a new Jobsite or Warehouse"""
+    data = request.get_json()
+    
+    if not data or not data.get('name') or not data.get('type'):
+        return jsonify({"error": "Missing 'name' or 'type' in payload"}), 400
+
+    try:
+        new_loc = Location(
+            name=data['name'], 
+            type=data['type'], # e.g., 'Jobsite' or 'Warehouse'
+            status="Active"
+        )
+        db.session.add(new_loc)
+        db.session.commit()
+        return jsonify({"message": "Location created successfully", "id": new_loc.id}), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500

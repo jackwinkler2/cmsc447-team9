@@ -83,6 +83,13 @@ export default function TabLayout() {
           ),
         }}
       />
+      <Tabs.Screen
+        name="admin-locations"
+        options={{
+          title: 'Add Location',
+          tabBarIcon: ({ color }) => <Ionicons name="business" size={24} color={color} />,
+        }}
+      />
     </Tabs>
   );
 }
