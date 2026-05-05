@@ -3,7 +3,7 @@ import { StyleSheet, Text, View, FlatList, ActivityIndicator, RefreshControl } f
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 const BRAND = "rgb(22, 13, 84)";
-const API_URL = "http://130.85.241.142:5000/api/inventory"; // Make sure this IP is still correct!
+const API_URL = "http://130.85.241.142:5000/api/inventory"; 
 
 export default function InventoryScreen() {
   const [inventory, setInventory] = useState([]);
