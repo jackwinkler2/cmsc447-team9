@@ -15,18 +15,24 @@ import { Ionicons } from "@expo/vector-icons";
 
 // mock data
 const MOCK_EXTRACTED = {
-  vendor: "Atlas Building Supplies",
-  poNumber: "PO-20891",
-  deliveryDate: "04/06/2026",
+  vendor: "Maryland Dept of Health",
+  poNumber: "PO-109957",
+  deliveryDate: "05/06/2026",
   jobSite: "Site A – 123 Main St",
   items: [
-    { material: "Concrete Mix 80lb", qty: "20", unit: "Bags" },
-    { material: "Rebar #4", qty: "50", unit: "Pieces" },
-    { material: "Plywood 4×8", qty: "15", unit: "Sheets" },
-    { material: "PVC Pipe 4in", qty: "30", unit: "Lengths" },
+    { material: "000020", qty: "1", unit: "SQ-95-VG6X-QD" },
+    { material: "000020", qty: "1", unit: "SQ-95-VG6X-QD" },
+    { material: "000020", qty: "1", unit: "SQ-95-VG6X-QD" },
+    { material: "000020", qty: "1", unit: "SQ-95-VG6X-QD" },
+    { material: "000020", qty: "1", unit: "SQ-95-VG6X-QD" },
+    { material: "000020", qty: "1", unit: "SQ-95-VG6X-QD" },
+    { material: "000020", qty: "1", unit: "SQ-95-VG6X-QD" },
+    { material: "000020", qty: "1", unit: "SQ-95-VG6X-QD" },
+    { material: "000020", qty: "1", unit: "SQ-95-VG6X-QD" },
+    { material: "000020", qty: "1", unit: "SQ-95-VG6X-QD" },
   ],
-  receivedBy: "J. Smith",
-  notes: "All items in good condition. No visible damage.",
+  receivedBy: " ",
+  notes: " ",
 };
 
 export default function LogDeliveryScreen() {
