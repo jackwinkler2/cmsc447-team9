@@ -1,256 +1,275 @@
-import { useRef, useState } from "react";
-import {
-  Alert,
-  Image,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { CameraView, CameraType, useCameraPermissions } from "expo-camera";
-import { Ionicons } from "@expo/vector-icons";
+import { useState, useEffect } from 'react';
+import { StyleSheet, Text, View, TextInput, Pressable, Alert, ActivityIndicator, ScrollView, Image } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import * as ImagePicker from 'expo-image-picker';
 
-// mock data
-const MOCK_EXTRACTED = {
-  vendor: "Maryland Dept of Health",
-  poNumber: "PO-109957",
-  deliveryDate: "05/06/2026",
-  jobSite: "Site A – 123 Main St",
-  items: [
-    { material: "000020", qty: "1", unit: "SQ-95-VG6X-QD" },
-    { material: "000020", qty: "1", unit: "SQ-95-VG6X-QD" },
-    { material: "000020", qty: "1", unit: "SQ-95-VG6X-QD" },
-    { material: "000020", qty: "1", unit: "SQ-95-VG6X-QD" },
-    { material: "000020", qty: "1", unit: "SQ-95-VG6X-QD" },
-    { material: "000020", qty: "1", unit: "SQ-95-VG6X-QD" },
-    { material: "000020", qty: "1", unit: "SQ-95-VG6X-QD" },
-    { material: "000020", qty: "1", unit: "SQ-95-VG6X-QD" },
-    { material: "000020", qty: "1", unit: "SQ-95-VG6X-QD" },
-    { material: "000020", qty: "1", unit: "SQ-95-VG6X-QD" },
-  ],
-  receivedBy: " ",
-  notes: " ",
-};
+const BRAND = "rgb(22, 13, 84)";
+const IP = "130.85.251.186"; 
+const API_MATERIALS = `http://${IP}:5000/api/materials`; 
+const API_DELIVERY = `http://${IP}:5000/api/deliveries`; 
+const API_UPLOAD = `http://${IP}:5000/api/upload-image`;
+const API_ANALYZE = `http://${IP}:5000/api/analyze-receipt`;
+
+const API_LOCATIONS = `http://${IP}:5000/api/locations?role=logistics`;
+
+type DeliveryItem = { id: string; mode: 'existing' | 'new'; materialId: number | null; newName: string; newPhotoUrl: string; quantity: string; };
 
 export default function LogDeliveryScreen() {
-  const [permission, requestPermission] = useCameraPermissions();
-  const [photoUri, setPhotoUri] = useState<string | null>(null);
+  const [locations, setLocations] = useState<any[]>([]);
+  const [materials, setMaterials] = useState<any[]>([]);
+  const [loadingInitial, setLoadingInitial] = useState(true);
   
-  // hold and edit the extracted data
-  const [formData, setFormData] = useState(MOCK_EXTRACTED);
+  const [entryMode, setEntryMode] = useState<'manual' | 'ocr'>('manual');
+  const [selectedJobsite, setSelectedJobsite] = useState<number | null>(null);
   
-  const cameraRef = useRef<CameraView>(null);
+  const [items, setItems] = useState<DeliveryItem[]>([{ id: '1', mode: 'existing', materialId: null, newName: '', newPhotoUrl: '', quantity: '' }]);
+  const [receiptUri, setReceiptUri] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [ocrProcessing, setOcrProcessing] = useState(false);
 
-  async function handleCapture() {
-    if (!cameraRef.current) return;
-    const photo = await cameraRef.current.takePictureAsync({ quality: 0.7 });
-    if (photo) {
-      setPhotoUri(photo.uri);
-      // resets form data to new ocr after photo is taken
-      setFormData(MOCK_EXTRACTED); 
+  useEffect(() => {
+    Promise.all([fetch(API_LOCATIONS), fetch(API_MATERIALS)])
+      .then(async ([locRes, matRes]) => { setLocations(await locRes.json()); setMaterials(await matRes.json()); })
+      .finally(() => setLoadingInitial(false));
+  }, []);
+
+  const updateItem = (id: string, field: keyof DeliveryItem, value: any) => setItems(items.map(i => i.id === id ? { ...i, [field]: value } : i));
+  const addItemRow = () => setItems([...items, { id: Date.now().toString(), mode: 'existing', materialId: null, newName: '', newPhotoUrl: '', quantity: '' }]);
+  const removeItemRow = (id: string) => setItems(items.filter(i => i.id !== id));
+
+  // media picker menu
+  const handleMediaSelection = (isOCR: boolean) => {
+    Alert.alert("Attach Document", "Choose an image source:", [
+      { text: "📷 Open Camera", onPress: () => launchMedia('camera', isOCR) },
+      { text: "🖼️ Photo Gallery", onPress: () => launchMedia('gallery', isOCR) },
+      { text: "Cancel", style: "cancel" }
+    ]);
+  };
+
+  const launchMedia = async (type: 'camera' | 'gallery', isOCR: boolean) => {
+    let result;
+    if (type === 'camera') {
+      await ImagePicker.requestCameraPermissionsAsync();
+      result = await ImagePicker.launchCameraAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.5 });
+    } else {
+      await ImagePicker.requestMediaLibraryPermissionsAsync();
+      result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.5 });
     }
-  }
 
-  function handleRetake() {
-    setPhotoUri(null);
-  }
-
-  // updates form state
-  const updateField = (field: string, value: string) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
-  };
-
-  const updateItem = (index: number, field: string, value: string) => {
-    const newItems = [...formData.items];
-    newItems[index] = { ...newItems[index], [field]: value };
-    setFormData((prev) => ({ ...prev, items: newItems }));
-  };
-
-  async function handleSubmit() {
-    if (!photoUri) return;
-
-    const uploadData = new FormData();
-    uploadData.append("file", {
-      uri: photoUri,
-      name: "packing_slip.jpg",
-      type: "image/jpeg",
-    } as any);
-    
-    // appends the edited JSON data alongside the image
-    uploadData.append("ocr_data", JSON.stringify(formData));
-
-    try {
-      // change to local device ip when testing
-      const response = await fetch("http://130.85.241.142:5000/api/upload", {
-        method: "POST",
-        body: uploadData,
-        headers: {
-          "Content-Type": "multipart/form-data",
-        },
-      });
-
-      if (response.ok) {
-        Alert.alert("Delivery Logged", "Packing slip and data uploaded successfully.");
-        setPhotoUri(null); 
+    if (!result.canceled) {
+      if (isOCR) {
+        processRealOCR(result.assets[0].uri);
       } else {
-        const errorData = await response.json();
-        Alert.alert("Upload Failed", errorData.error || "An error occurred");
+        setReceiptUri(result.assets[0].uri);
       }
-    } catch (error) {
-      console.error(error);
-      Alert.alert("Error", "Could not connect to the server.");
     }
-  }
+  };
 
-  if (!permission) return <View style={styles.flex} />;
+  // process ocr
+  const processRealOCR = async (uri: string) => {
+    setOcrProcessing(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', { uri, name: 'scan.jpg', type: 'image/jpeg' } as any);
+      const response = await fetch(API_ANALYZE, { method: 'POST', body: formData, headers: { 'Content-Type': 'multipart/form-data' }});
+      if (!response.ok) throw new Error("Failed to analyze.");
+      
+      const data = await response.json();
+      setReceiptUri(data.receipt_url);
+      
+      if (data.extracted_items && data.extracted_items.length > 0) {
+        setItems(data.extracted_items.map((item: any, i: number) => ({
+          id: Date.now().toString() + i, mode: 'existing', materialId: item.material_id, newName: '', newPhotoUrl: '', quantity: item.quantity.toString()
+        })));
+        Alert.alert("Scan Complete", `Found ${data.extracted_items.length} matching materials.`);
+      } else {
+        Alert.alert("No Matches", "Could not match text to catalog.");
+      }
+      setEntryMode('manual'); 
+    } catch (e) {
+      Alert.alert("Scan Failed", "Could not process the document.");
+    } finally {
+      setOcrProcessing(false);
+    }
+  };
 
-  if (!permission.granted) {
-    return (
-      <SafeAreaView style={styles.safe}>
-        <View style={styles.permissionContainer}>
-          <Ionicons name="camera-outline" size={64} color={BRAND} />
-          <Text style={styles.permissionText}>Camera access is required to scan packing slips.</Text>
-          <Pressable style={styles.button} onPress={requestPermission}>
-            <Text style={styles.buttonText}>Grant Permission</Text>
-          </Pressable>
-        </View>
-      </SafeAreaView>
-    );
-  }
+  const handleSubmitManual = async () => {
+    if (!selectedJobsite) return Alert.alert("Missing", "Select a jobsite.");
+    setSubmitting(true);
+    try {
+      let finalReceiptUrl = receiptUri;
+      if (receiptUri && !receiptUri.startsWith('http')) {
+        const formData = new FormData();
+        formData.append('file', { uri: receiptUri, name: 'receipt.jpg', type: 'image/jpeg' } as any);
+        const uploadRes = await fetch(API_UPLOAD, { method: 'POST', body: formData, headers: { 'Content-Type': 'multipart/form-data' }});
+        if (uploadRes.ok) finalReceiptUrl = (await uploadRes.json()).photo_url;
+      }
 
-  // review & edit
-  if (photoUri) {
-    return (
-      <SafeAreaView style={styles.safe}>
-        <ScrollView contentContainerStyle={styles.reviewContainer}>
-          <Image source={{ uri: photoUri }} style={styles.thumbnail} resizeMode="cover" />
+      const payloadItems = [];
+      for (const item of items) {
+        let matId = item.materialId;
+        if (item.mode === 'new') {
+          const matRes = await fetch(API_MATERIALS, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: item.newName, photo_url: item.newPhotoUrl })});
+          matId = (await matRes.json()).id; 
+        }
+        payloadItems.push({ material_id: matId, quantity: parseInt(item.quantity) });
+      }
 
-          <Text style={styles.reviewHeading}>Extracted Data</Text>
-          <Text style={styles.reviewSubtext}>Tap any field to correct OCR mistakes before submitting</Text>
+      await fetch(API_DELIVERY, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jobsite_id: selectedJobsite, packing_slip_url: finalReceiptUrl, items: payloadItems }) });
+      Alert.alert("Success", "Delivery logged!");
+      setItems([{ id: '1', mode: 'existing', materialId: null, newName: '', newPhotoUrl: '', quantity: '' }]);
+      setReceiptUri(null); 
+    } catch (e: any) {
+      Alert.alert("Error", e.message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
-          <View style={styles.card}>
-            <EditableRow label="Vendor" value={formData.vendor} onChangeText={(val) => updateField("vendor", val)} />
-            <EditableRow label="PO Number" value={formData.poNumber} onChangeText={(val) => updateField("poNumber", val)} />
-            <EditableRow label="Delivery Date" value={formData.deliveryDate} onChangeText={(val) => updateField("deliveryDate", val)} />
-            <EditableRow label="Job Site" value={formData.jobSite} onChangeText={(val) => updateField("jobSite", val)} />
-          </View>
+  if (loadingInitial) return <ActivityIndicator size="large" color={BRAND} style={{flex: 1, justifyContent: "center"}} />;
 
-          <Text style={styles.sectionLabel}>Items Received</Text>
-          <View style={styles.card}>
-            <View style={styles.tableHeader}>
-              <Text style={[styles.tableCell, styles.tableHeadText, { flex: 3 }]}>Material</Text>
-              <Text style={[styles.tableCell, styles.tableHeadText, { flex: 1, textAlign: "right" }]}>Qty</Text>
-              <Text style={[styles.tableCell, styles.tableHeadText, { flex: 1.5, textAlign: "right" }]}>Unit</Text>
-            </View>
-            {formData.items.map((item, i) => (
-              <View key={i} style={[styles.tableRow, i % 2 === 1 && styles.tableRowAlt]}>
-                <TextInput 
-                  style={[styles.tableInput, { flex: 3 }]} 
-                  value={item.material} 
-                  onChangeText={(val) => updateItem(i, "material", val)} 
-                />
-                <TextInput 
-                  style={[styles.tableInput, { flex: 1, textAlign: "right" }]} 
-                  value={item.qty} 
-                  keyboardType="numeric"
-                  onChangeText={(val) => updateItem(i, "qty", val)} 
-                />
-                <TextInput 
-                  style={[styles.tableInput, { flex: 1.5, textAlign: "right" }]} 
-                  value={item.unit} 
-                  onChangeText={(val) => updateItem(i, "unit", val)} 
-                />
-              </View>
-            ))}
-          </View>
-
-          <View style={styles.card}>
-            <EditableRow label="Received By" value={formData.receivedBy} onChangeText={(val) => updateField("receivedBy", val)} />
-            <EditableRow label="Notes" value={formData.notes} onChangeText={(val) => updateField("notes", val)} />
-          </View>
-
-          <View style={styles.actionRow}>
-            <Pressable style={styles.retakeButton} onPress={handleRetake}>
-              <Ionicons name="camera-outline" size={18} color={BRAND} />
-              <Text style={styles.retakeText}>Retake</Text>
-            </Pressable>
-            <Pressable style={styles.submitButton} onPress={handleSubmit}>
-              <Text style={styles.buttonText}>Submit Data</Text>
-            </Pressable>
-          </View>
-        </ScrollView>
-      </SafeAreaView>
-    );
-  }
-
-  // camera
   return (
     <SafeAreaView style={styles.safe}>
-      <View style={styles.cameraContainer}>
-        <CameraView ref={cameraRef} style={styles.camera} facing={"back" as CameraType} />
-        <View style={[styles.cameraOverlay, { position: "absolute", top: 0, bottom: 0, left: 0, right: 0 }]}>
-          <Text style={styles.cameraHint}>Point at a packing slip</Text>
-          <Pressable style={styles.shutterButton} onPress={handleCapture}>
-            <View style={styles.shutterInner} />
-          </Pressable>
+      <ScrollView contentContainerStyle={styles.container}>
+        <View style={styles.header}><Text style={styles.headerTitle}>Intake Delivery</Text></View>
+
+        <View style={styles.toggleContainer}>
+          <Pressable style={[styles.toggleButton, entryMode === 'manual' && styles.toggleActive]} onPress={() => setEntryMode('manual')}><Text style={[styles.toggleText, entryMode === 'manual' && styles.toggleTextActive]}>Manual Entry</Text></Pressable>
+          <Pressable style={[styles.toggleButton, entryMode === 'ocr' && styles.toggleActive]} onPress={() => setEntryMode('ocr')}><Text style={[styles.toggleText, entryMode === 'ocr' && styles.toggleTextActive]}>Smart OCR Scan</Text></Pressable>
         </View>
-      </View>
+
+        {entryMode === 'manual' && (
+          <View style={styles.card}>
+            <Text style={styles.label}>1. Destination</Text>
+            
+            {/* if no assigned locations */}
+            {locations.length === 0 ? (
+              <Text style={{ color: '#d84315', marginBottom: 24, fontStyle: 'italic' }}>
+                You have not been assigned to any destinations. Please contact your Project Manager.
+              </Text>
+            ) : (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroll}>
+                {locations.map((loc) => (
+                  <Pressable key={loc.id} style={[styles.chip, selectedJobsite === loc.id && styles.chipActive]} onPress={() => setSelectedJobsite(loc.id)}>
+                    <Text style={[styles.chipText, selectedJobsite === loc.id && styles.chipTextActive]}>{loc.name}</Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            )}
+
+            <Text style={styles.label}>2. Materials Delivered</Text>
+            {items.map((item, index) => (
+              <View key={item.id} style={styles.lineItemBox}>
+                <View style={styles.itemHeaderRow}>
+                  <Text style={styles.itemHeaderText}>Item #{index + 1}</Text>
+                  {items.length > 1 && <Pressable onPress={() => removeItemRow(item.id)}><Text style={styles.removeText}>Remove</Text></Pressable>}
+                </View>
+
+                <View style={styles.materialHeaderRow}>
+                  <View style={styles.smallToggle}>
+                    <Pressable onPress={() => updateItem(item.id, 'mode', 'existing')}><Text style={[styles.smallToggleText, item.mode === 'existing' && styles.smallToggleActive]}>Existing</Text></Pressable>
+                    <Text style={{color: '#ccc', marginHorizontal: 8}}>|</Text>
+                    <Pressable onPress={() => updateItem(item.id, 'mode', 'new')}><Text style={[styles.smallToggleText, item.mode === 'new' && styles.smallToggleActive]}>+ Add New</Text></Pressable>
+                  </View>
+                </View>
+
+                {item.mode === 'existing' ? (
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroll}>
+                    {materials.map((mat) => (
+                      <Pressable key={mat.id} style={[styles.smallChip, item.materialId === mat.id && styles.chipActive]} onPress={() => updateItem(item.id, 'materialId', mat.id)}>
+                        <Text style={[styles.smallChipText, item.materialId === mat.id && styles.chipTextActive]}>{mat.name}</Text>
+                      </Pressable>
+                    ))}
+                  </ScrollView>
+                ) : (
+                  <View style={styles.newMaterialBox}>
+                    <TextInput style={styles.input} placeholder="Material Name" value={item.newName} onChangeText={(v) => updateItem(item.id, 'newName', v)} />
+                  </View>
+                )}
+                <TextInput style={styles.input} placeholder="Quantity" keyboardType="numeric" value={item.quantity} onChangeText={(v) => updateItem(item.id, 'quantity', v)} />
+              </View>
+            ))}
+
+            <Pressable style={styles.addAnotherButton} onPress={addItemRow}><Text style={styles.addAnotherText}>+ Add Another Material</Text></Pressable>
+
+            <Text style={styles.label}>3. Packing Slip (Optional)</Text>
+            <View style={styles.photoRow}>
+              <Pressable style={styles.cameraButton} onPress={() => handleMediaSelection(false)}>
+                <Text style={styles.cameraText}>🖼️ {receiptUri ? "Change Image" : "Attach Receipt"}</Text>
+              </Pressable>
+              {receiptUri && <Image source={{ uri: receiptUri }} style={styles.previewImage} />}
+            </View>
+
+            <Pressable style={styles.submitButton} onPress={handleSubmitManual} disabled={submitting}>
+              {submitting ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitText}>Submit Delivery</Text>}
+            </Pressable>
+          </View>
+        )}
+
+        {entryMode === 'ocr' && (
+          <View style={[styles.card, { alignItems: 'center', paddingVertical: 40 }]}>
+            {ocrProcessing ? (
+              <View style={{ alignItems: 'center' }}>
+                <ActivityIndicator size="large" color={BRAND} />
+                <Text style={styles.ocrTitle}>Analyzing Document...</Text>
+                <Text style={styles.ocrSubtext}>Sending secure scan to AWS Textract AI...</Text>
+              </View>
+            ) : (
+              <>
+                <View style={styles.ocrIconPlaceholder}><Text style={{ fontSize: 40 }}>📄</Text></View>
+                <Text style={styles.ocrTitle}>Auto-Scan Packing Slip</Text>
+                <Text style={styles.ocrSubtext}>Upload a photo of the vendor receipt to extract materials automatically.</Text>
+                <Pressable style={styles.ocrButton} onPress={() => handleMediaSelection(true)}>
+                  <Text style={styles.submitText}>🖼️ Upload Image</Text>
+                </Pressable>
+              </>
+            )}
+          </View>
+        )}
+      </ScrollView>
     </SafeAreaView>
   );
 }
 
-// editable row component
-function EditableRow({ label, value, onChangeText }: { label: string; value: string; onChangeText: (text: string) => void }) {
-  return (
-    <View style={styles.rowItem}>
-      <Text style={styles.rowLabel}>{label}</Text>
-      <TextInput 
-        style={styles.rowInput} 
-        value={value} 
-        onChangeText={onChangeText}
-        multiline={label === "Notes"}
-      />
-    </View>
-  );
-}
-
-const BRAND = "rgb(22, 13, 84)";
-
 const styles = StyleSheet.create({
-  flex: { flex: 1 },
   safe: { flex: 1, backgroundColor: "#f5f5f5" },
-  permissionContainer: { flex: 1, alignItems: "center", justifyContent: "center", padding: 32, gap: 16 },
-  permissionText: { fontSize: 16, color: "#555", textAlign: "center" },
-  cameraContainer: { flex: 1 },
-  camera: { flex: 1 },
-  cameraOverlay: { flex: 1, justifyContent: "flex-end", alignItems: "center", paddingBottom: 48, gap: 24 },
-  cameraHint: { color: "#fff", fontSize: 15, backgroundColor: "rgba(0,0,0,0.4)", paddingHorizontal: 16, paddingVertical: 6, borderRadius: 20, overflow: "hidden" },
-  shutterButton: { width: 80, height: 80, borderRadius: 40, backgroundColor: "rgba(255,255,255,0.3)", borderWidth: 4, borderColor: "#fff", alignItems: "center", justifyContent: "center" },
-  shutterInner: { width: 60, height: 60, borderRadius: 30, backgroundColor: "#fff" },
-  reviewContainer: { padding: 20 },
-  thumbnail: { width: "100%", height: 200, borderRadius: 12, marginBottom: 20 },
-  reviewHeading: { fontSize: 24, fontWeight: "700", color: BRAND },
-  reviewSubtext: { fontSize: 13, color: "#888", marginBottom: 20 },
-  sectionLabel: { fontSize: 15, fontWeight: "700", color: BRAND, marginBottom: 8, marginTop: 4 },
-  card: { backgroundColor: "#fff", borderRadius: 12, overflow: "hidden", marginBottom: 16, borderWidth: 1, borderColor: "#e8e8e8" },
-  rowItem: { flexDirection: "row", paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: "#f0f0f0", alignItems: "center" },
-  rowLabel: { width: 110, fontSize: 13, fontWeight: "600", color: "#888" },
-  
-  rowInput: { flex: 1, fontSize: 14, color: "#333", padding: 0 },
-  tableInput: { fontSize: 14, color: "#333", padding: 0, minHeight: 20 },
-  
-  tableHeader: { flexDirection: "row", paddingHorizontal: 16, paddingVertical: 10, backgroundColor: BRAND },
-  tableHeadText: { color: "#fff", fontWeight: "700", fontSize: 13 },
-  tableRow: { flexDirection: "row", paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: "#f0f0f0", alignItems: "center" },
-  tableRowAlt: { backgroundColor: "#fafafa" },
-  tableCell: { fontSize: 14, color: "#333" },
-  actionRow: { flexDirection: "row", gap: 12, marginTop: 4, marginBottom: 16 },
-  retakeButton: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, borderWidth: 2, borderColor: BRAND, borderRadius: 10, paddingVertical: 14 },
-  retakeText: { color: BRAND, fontSize: 16, fontWeight: "700" },
-  submitButton: { flex: 2, backgroundColor: BRAND, borderRadius: 10, paddingVertical: 14, alignItems: "center" },
-  button: { backgroundColor: BRAND, borderRadius: 10, paddingVertical: 14, paddingHorizontal: 32, alignItems: "center" },
-  buttonText: { color: "#fff", fontSize: 16, fontWeight: "700" },
+  container: { padding: 16 },
+  header: { marginBottom: 16 },
+  headerTitle: { fontSize: 28, fontWeight: "bold", color: BRAND },
+  toggleContainer: { flexDirection: 'row', backgroundColor: '#e0e0e0', borderRadius: 8, padding: 4, marginBottom: 16 },
+  toggleButton: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 6 },
+  toggleActive: { backgroundColor: '#fff', elevation: 2 },
+  toggleText: { fontSize: 15, fontWeight: '600', color: '#666' },
+  toggleTextActive: { color: BRAND },
+  card: { backgroundColor: "#fff", padding: 20, borderRadius: 12, borderWidth: 1, borderColor: "#e8e8e8" },
+  label: { fontSize: 15, fontWeight: "600", color: "#333", marginBottom: 12 },
+  lineItemBox: { backgroundColor: '#fdfdfd', borderWidth: 1, borderColor: '#e0e0e0', borderRadius: 8, padding: 12, marginBottom: 16 },
+  itemHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12, borderBottomWidth: 1, borderBottomColor: '#eee', paddingBottom: 8 },
+  itemHeaderText: { fontWeight: '700', color: BRAND },
+  removeText: { color: '#dc3545', fontWeight: '600', fontSize: 13 },
+  addAnotherButton: { backgroundColor: '#e8eaf6', paddingVertical: 12, borderRadius: 8, alignItems: 'center', marginBottom: 24, borderWidth: 1, borderColor: '#c5cae9', borderStyle: 'dashed' },
+  addAnotherText: { color: BRAND, fontWeight: '700' },
+  materialHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+  smallToggle: { flexDirection: 'row', alignItems: 'center' },
+  smallToggleText: { fontSize: 13, fontWeight: '600', color: '#888' },
+  smallToggleActive: { color: BRAND, textDecorationLine: 'underline' },
+  newMaterialBox: { backgroundColor: '#fff', padding: 12, borderRadius: 8, borderWidth: 1, borderColor: '#eee', marginBottom: 16 },
+  input: { borderWidth: 1, borderColor: "#ccc", borderRadius: 8, padding: 12, fontSize: 15, marginBottom: 12, backgroundColor: "#fff" },
+  chipScroll: { marginBottom: 16, paddingBottom: 4 },
+  chip: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 20, backgroundColor: "#eee", marginRight: 10, borderWidth: 1, borderColor: "#ddd" },
+  smallChip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 16, backgroundColor: "#eee", marginRight: 8, borderWidth: 1, borderColor: "#ddd" },
+  chipActive: { backgroundColor: BRAND, borderColor: BRAND },
+  chipText: { color: "#555", fontWeight: "600" },
+  smallChipText: { color: "#555", fontWeight: "600", fontSize: 13 },
+  chipTextActive: { color: "#fff" },
+  photoRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 24, gap: 12 },
+  cameraButton: { flex: 1, backgroundColor: "#f0f0f0", padding: 14, borderRadius: 8, alignItems: "center", borderWidth: 1, borderColor: "#ddd" },
+  cameraText: { color: '#444', fontWeight: "600", fontSize: 14 },
+  previewImage: { width: 50, height: 50, borderRadius: 8, borderWidth: 1, borderColor: "#ddd" },
+  submitButton: { backgroundColor: BRAND, paddingVertical: 16, borderRadius: 8, alignItems: "center" },
+  submitText: { color: "#fff", fontSize: 16, fontWeight: "700" },
+  ocrIconPlaceholder: { width: 80, height: 80, borderRadius: 40, backgroundColor: '#e3f2fd', justifyContent: 'center', alignItems: 'center', marginBottom: 16 },
+  ocrTitle: { fontSize: 20, fontWeight: 'bold', color: '#333', marginBottom: 8, marginTop: 12 },
+  ocrSubtext: { fontSize: 14, color: '#666', textAlign: 'center', paddingHorizontal: 20, marginBottom: 24, lineHeight: 20 },
+  ocrButton: { backgroundColor: '#1565c0', paddingVertical: 16, paddingHorizontal: 32, borderRadius: 8, alignItems: "center", width: '100%' }
 });

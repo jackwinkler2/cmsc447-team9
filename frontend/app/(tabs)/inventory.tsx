@@ -1,52 +1,86 @@
 import { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, FlatList, ActivityIndicator, RefreshControl } from 'react-native';
+import { StyleSheet, Text, View, FlatList, ActivityIndicator, RefreshControl, Pressable, Image, ScrollView, Modal, TouchableOpacity, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { router } from 'expo-router';
 
 const BRAND = "rgb(22, 13, 84)";
-const API_URL = "http://130.85.241.142:5000/api/inventory"; 
+const IP = "130.85.251.186";
 
 export default function InventoryScreen() {
-  const [inventory, setInventory] = useState([]);
+  const [inventory, setInventory] = useState<any[]>([]);
+  const [locations, setLocations] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  
+  const [activeFilter, setActiveFilter] = useState('All'); 
+  const [viewingImage, setViewingImage] = useState<string | null>(null);
+  
+  // search state
+  const [searchQuery, setSearchQuery] = useState('');
 
-  // Function to fetch data from the Flask backend
-  const fetchInventory = async () => {
+  const fetchData = async () => {
     try {
-      const response = await fetch(API_URL);
-      if (!response.ok) throw new Error("Network response was not ok");
-      const data = await response.json();
-      setInventory(data);
+      const [invRes, locRes] = await Promise.all([
+        fetch(`http://${IP}:5000/api/inventory`),
+        fetch(`http://${IP}:5000/api/locations`)
+      ]);
+      
+      const invData = await invRes.json();
+      const locData = await locRes.json();
+
+      if (Array.isArray(invData)) setInventory(invData);
+      else { console.error("Backend Inventory Error:", invData); setInventory([]); }
+
+      if (Array.isArray(locData)) setLocations(locData);
+      else { console.error("Backend Locations Error:", locData); setLocations([]); }
+
     } catch (error) {
-      console.error("Error fetching inventory:", error);
+      console.error("Network fetching error:", error);
+      setInventory([]);
+      setLocations([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
   };
 
-  // Run the fetch when the screen loads
-  useEffect(() => {
-    fetchInventory();
-  }, []);
+  useEffect(() => { fetchData(); }, []);
 
-  // Handle pull-to-refresh
   const onRefresh = () => {
     setRefreshing(true);
-    fetchInventory();
+    fetchData();
   };
 
-  // How each row should look
+  // combined filter and search logic
+  const displayedInventory = inventory.filter(item => {
+    const matchesLocation = activeFilter === 'All' || item.location === activeFilter;
+    const matchesSearch = item.material.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchesLocation && matchesSearch;
+  });
+
   const renderItem = ({ item }: { item: any }) => (
     <View style={styles.card}>
-      <View style={styles.cardHeader}>
-        <Text style={styles.materialName}>{item.material}</Text>
-        <Text style={styles.quantity}>Qty: {item.quantity}</Text>
+      <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 12 }}>
+        <Pressable onPress={() => setViewingImage(item.photo_url || "https://placehold.co/600/png?text=No+Photo")}>
+          <Image source={{ uri: item.photo_url || "https://placehold.co/150/png?text=No+Photo" }} style={styles.materialImage} />
+        </Pressable>
+        <View style={{ flex: 1 }}>
+          <View style={styles.cardHeader}>
+            <Text style={styles.materialName}>{item.material}</Text>
+            <Text style={styles.quantity}>Qty: {item.quantity}</Text>
+          </View>
+        </View>
       </View>
-      <View style={styles.cardFooter}>
-        <Text style={styles.locationText}>{item.location}</Text>
-        <Text style={styles.typeTag}>{item.location_type}</Text>
-      </View>
+      
+      <Pressable style={styles.cardFooter} onPress={() => router.push(`/warehouse/${item.location_id}`)}>
+        <View style={{ flexDirection: "row", alignItems: "center" }}>
+          <Text style={styles.locationText}>{item.location}</Text>
+          <Text style={{fontSize: 12, marginLeft: 4}}>🔗</Text>
+        </View>
+        <Text style={[styles.typeTag, item.location_type === 'Warehouse' ? styles.warehouseTag : styles.jobsiteTag]}>
+          {item.location_type}
+        </Text>
+      </Pressable>
     </View>
   );
 
@@ -54,43 +88,90 @@ export default function InventoryScreen() {
     <SafeAreaView style={styles.safe}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Live Inventory</Text>
+        
+        {/* universal search bar 3 */}
+        <View style={{ paddingHorizontal: 16 }}>
+          <TextInput
+            style={styles.searchBar}
+            placeholder="🔍 Search by material name..."
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            clearButtonMode="while-editing"
+          />
+        </View>
+
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterRow}>
+          <Pressable style={[styles.filterChip, activeFilter === 'All' && styles.activeChip]} onPress={() => setActiveFilter('All')}>
+            <Text style={[styles.chipText, activeFilter === 'All' && styles.activeChipText]}>All Locations</Text>
+          </Pressable>
+          
+          {locations.map(loc => (
+            <Pressable key={loc.id} style={[styles.filterChip, activeFilter === loc.name && styles.activeChip]} onPress={() => setActiveFilter(loc.name)}>
+              <Text style={[styles.chipText, activeFilter === loc.name && styles.activeChipText]}>{loc.name}</Text>
+            </Pressable>
+          ))}
+        </ScrollView>
       </View>
 
       {loading ? (
-        <View style={styles.centered}>
-          <ActivityIndicator size="large" color={BRAND} />
-        </View>
-      ) : inventory.length === 0 ? (
-        <View style={styles.centered}>
-          <Text style={styles.emptyText}>No inventory found.</Text>
-          <Text style={styles.emptySubtext}>Submit a packing slip to add items!</Text>
-        </View>
+        <ActivityIndicator size="large" color={BRAND} style={styles.centered} />
       ) : (
         <FlatList
-          data={inventory}
+          data={displayedInventory}
           keyExtractor={(item) => item.id.toString()}
           renderItem={renderItem}
           contentContainerStyle={styles.listContainer}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={BRAND} />}
+          ListEmptyComponent={<Text style={styles.emptyText}>No items found.</Text>}
         />
       )}
+
+      <Modal visible={!!viewingImage} transparent={true} animationType="fade">
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity style={styles.modalCloseArea} onPress={() => setViewingImage(null)} />
+          <View style={styles.modalContent}>
+            <Image source={{ uri: viewingImage || "" }} style={styles.fullScreenImage} resizeMode="contain" />
+            <Pressable style={styles.closeButton} onPress={() => setViewingImage(null)}>
+              <Text style={styles.closeButtonText}>Close View</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: "#f5f5f5" },
-  header: { padding: 20, backgroundColor: "#fff", borderBottomWidth: 1, borderBottomColor: "#e8e8e8" },
-  headerTitle: { fontSize: 24, fontWeight: "bold", color: BRAND },
+  header: { paddingTop: 16, paddingBottom: 8, backgroundColor: "#fff", borderBottomWidth: 1, borderBottomColor: "#e8e8e8" },
+  headerTitle: { fontSize: 24, fontWeight: "bold", color: BRAND, marginBottom: 12, paddingHorizontal: 16 },
+
+  searchBar: { backgroundColor: '#f0f0f0', padding: 12, borderRadius: 10, marginBottom: 12, fontSize: 16, borderWidth: 1, borderColor: '#e0e0e0' },
+  
+  filterRow: { paddingHorizontal: 16, paddingBottom: 8 },
+  filterChip: { paddingVertical: 8, paddingHorizontal: 16, borderRadius: 20, backgroundColor: "#f0f0f0", borderWidth: 1, borderColor: "#e0e0e0", marginRight: 8 },
+  activeChip: { backgroundColor: BRAND, borderColor: BRAND },
+  chipText: { fontSize: 14, fontWeight: "600", color: "#555" },
+  activeChipText: { color: "#fff" },
+
   centered: { flex: 1, justifyContent: "center", alignItems: "center" },
-  emptyText: { fontSize: 18, color: "#555", fontWeight: "600" },
-  emptySubtext: { fontSize: 14, color: "#888", marginTop: 8 },
+  emptyText: { textAlign: "center", marginTop: 40, fontSize: 16, color: "#666" },
   listContainer: { padding: 16 },
-  card: { backgroundColor: "#fff", padding: 16, borderRadius: 12, marginBottom: 12, borderWidth: 1, borderColor: "#e8e8e8", elevation: 2, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 2 },
-  cardHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 8 },
-  materialName: { fontSize: 16, fontWeight: "700", color: "#333" },
-  quantity: { fontSize: 16, fontWeight: "700", color: BRAND },
-  cardFooter: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  locationText: { fontSize: 14, color: "#666" },
-  typeTag: { fontSize: 12, backgroundColor: "#eef2ff", color: BRAND, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, overflow: "hidden" },
+  card: { backgroundColor: "#fff", padding: 16, borderRadius: 12, marginBottom: 12, borderWidth: 1, borderColor: "#e8e8e8" },
+  cardHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  materialName: { fontSize: 18, fontWeight: "700", color: "#333" },
+  quantity: { fontSize: 18, fontWeight: "700", color: BRAND },
+  materialImage: { width: 50, height: 50, borderRadius: 8, marginRight: 12, backgroundColor: "#eee" },
+  cardFooter: { marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: "#eee", flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  locationText: { fontSize: 15, fontWeight: "600", color: "#444" },
+  typeTag: { fontSize: 12, fontWeight: "700", paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, overflow: "hidden" },
+  warehouseTag: { backgroundColor: "#e3f2fd", color: "#1565c0" },
+  jobsiteTag: { backgroundColor: "#fbe9e7", color: "#d84315" },
+
+  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.85)", justifyContent: "center", alignItems: "center" },
+  modalCloseArea: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0 },
+  modalContent: { width: '90%', alignItems: 'center' },
+  fullScreenImage: { width: '100%', height: 400, borderRadius: 12, marginBottom: 20 },
+  closeButton: { backgroundColor: "#fff", paddingVertical: 12, paddingHorizontal: 32, borderRadius: 8 },
+  closeButtonText: { color: "#333", fontWeight: "700", fontSize: 16 }
 });
